@@ -11,7 +11,10 @@ public enum ErrorCode {
     TOKEN_INVALID(400,"Token invalid", HttpStatus.BAD_REQUEST),
     TOKEN_EXPIRED(400,"Token expired", HttpStatus.BAD_REQUEST),
     UNAUTHORIZED(401,"Unauthorized", HttpStatus.UNAUTHORIZED),
-    ACCESS_DINED(403,"Access denied", HttpStatus.FORBIDDEN),;
+    ACCESS_DINED(403,"Access denied", HttpStatus.FORBIDDEN),
+    REFRESH_TOKEN_INVALID(400,"Refresh token invalid", HttpStatus.BAD_REQUEST),
+    SIGN_OUT_FAILED(400,"Sign out failed", HttpStatus.BAD_REQUEST),
+    ;
 
 
 
