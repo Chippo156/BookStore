@@ -11,6 +11,7 @@ import com.book.book_store.model.User;
 import com.book.book_store.repository.UserRepository;
 import com.book.book_store.service.AuthenticationService;
 import com.book.book_store.service.JwtService;
+import com.book.book_store.service.RedisService;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jwt.SignedJWT;
 import io.micrometer.common.util.StringUtils;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.ParseException;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +36,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final RedisService redisService;
 
     @Override
     @Transactional
@@ -103,9 +106,12 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String email = jwtService.extractByUserName(request.getAccessToken());
         User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXCITED));
         long accessTokenExp = jwtService.extractTokenExpired(request.getAccessToken());
+        log.info("Access token expired : {}",accessTokenExp);
         if(accessTokenExp > 0){
             try{
                 String jwtId = SignedJWT.parse(request.getAccessToken()).getJWTClaimsSet().getJWTID();
+                redisService.save(jwtId,request.getAccessToken(),accessTokenExp, TimeUnit.MILLISECONDS);
+                log.info("Access token added to blacklist : {}",redisService.get(jwtId));
                 user.setRefreshToken(null);
                 userRepository.save(user);
                 deleteRefreshTokenCookie(response);

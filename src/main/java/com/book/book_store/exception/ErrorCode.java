@@ -14,6 +14,7 @@ public enum ErrorCode {
     ACCESS_DINED(403,"Access denied", HttpStatus.FORBIDDEN),
     REFRESH_TOKEN_INVALID(400,"Refresh token invalid", HttpStatus.BAD_REQUEST),
     SIGN_OUT_FAILED(400,"Sign out failed", HttpStatus.BAD_REQUEST),
+    TOKEN_BLACK_LISTED(400,"Token blacklisted", HttpStatus.BAD_REQUEST),
     ;
 
 
