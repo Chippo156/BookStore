@@ -8,6 +8,12 @@ spring:
     username: postgres
     password: 12345678
     driver-class-name: org.postgresql.Driver
+  profiles:
+    active: "local"
+  elasticsearch:
+    uris: http://localhost:9200
+
+
   jpa:
         hibernate:
             ddl-auto: update
@@ -16,6 +22,26 @@ spring:
     redis:
       port: 6379
       host: localhost
-
+  kafka:
+    bootstrap-servers: localhost:9094
+    consumer:
+      group-id: my-consumer-group
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 2000MB
+      max-request-size: 2000MB
+      file-size-threshold: 2KB
 jwt:
   secret-key: 52e3da09a70671de0ea5851744228c1ab482bc5cb33a4cb8008bb60f138ae332
+
+cloudinary:
+    cloud-name: dqnwxejgy
+    api-key: 486184719822545
+    api-secret: XOtBNDM_B6EzTK9TUQ9ET1CBDHA
+
+

@@ -63,7 +63,9 @@ public class User extends AbstractEntity<Long> implements UserDetails {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL,orphanRemoval = true)
     private Set<UserHasRole> userHasRoles;
 
-
+    @OneToMany(mappedBy = "author", cascade = CascadeType.ALL)
+    private Set<Book> books;
+    
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return userHasRoles.stream().map(UserHasRole::getRole)
