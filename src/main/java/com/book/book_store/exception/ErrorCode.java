@@ -15,6 +15,7 @@ public enum ErrorCode {
     REFRESH_TOKEN_INVALID(400,"Refresh token invalid", HttpStatus.BAD_REQUEST),
     SIGN_OUT_FAILED(400,"Sign out failed", HttpStatus.BAD_REQUEST),
     TOKEN_BLACK_LISTED(400,"Token blacklisted", HttpStatus.BAD_REQUEST),
+    BOOK_NOT_FOUND(404,"Book not found", HttpStatus.NOT_FOUND),
     ;
 
 
