@@ -7,11 +7,13 @@ import com.book.book_store.model.Book;
 import com.book.book_store.model.User;
 import com.book.book_store.repository.criteria.SearchCriteria;
 import com.book.book_store.repository.criteria.SearchCriteriaQueryConsumer;
+import com.book.book_store.repository.specification.SpecSearchCriteria;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -114,7 +116,6 @@ public class SearchRepository {
     public PageResponse<BookDetailResponse> getBookWithSortAndKeyword(int page, int size, String sort, String keyword) {
         CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
         CriteriaQuery<Book> criteriaQuery = criteriaBuilder.createQuery(Book.class);
-        CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
         Root<Book> root = criteriaQuery.from(Book.class);
         var listPredicate = new ArrayList<Predicate>();
         if (StringUtils.hasLength(keyword)) {
@@ -190,6 +191,131 @@ public class SearchRepository {
         return entityManager.createQuery(criteriaQuery)
                 .getSingleResult();
     }
+
+    public PageResponse<BookDetailResponse> getBookJoinUser(Pageable pageable, String[] books, String[] users){
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Book> criteriaQuery = criteriaBuilder.createQuery(Book.class);
+        Root<Book> root = criteriaQuery.from(Book.class);
+        Join<Book,User> userJoin = root.join("author",JoinType.LEFT);
+
+        var userPredicate = new ArrayList<Predicate>();
+        var bookPredicate = new ArrayList<Predicate>();
+
+        var pattern = Pattern.compile("(\\w+?)([:><!])(.*)(\\p{Punct}?)(.*)(\\p{Punct}?)");
+
+        for(var book : books) {
+            var matcher = pattern.matcher(book);
+            if(matcher.find()){
+                SpecSearchCriteria searchCriteria = new SpecSearchCriteria(
+                        matcher.group(1),
+                        matcher.group(2),
+                        matcher.group(3),
+                        matcher.group(4),
+                        matcher.group(5)
+                );
+                Predicate predicate = toBookPredicate(criteriaBuilder,root,searchCriteria);
+                bookPredicate.add(predicate);
+            }
+        }
+        for(var user: users){
+            var matcher = pattern.matcher(user);
+            if(matcher.find()){
+                SpecSearchCriteria searchCriteria = new SpecSearchCriteria(
+                        matcher.group(1),
+                        matcher.group(2),
+                        matcher.group(3),
+                        matcher.group(4),
+                        matcher.group(5)
+                );
+                Predicate predicate = toUserPredicate(criteriaBuilder,userJoin,searchCriteria);
+                userPredicate.add(predicate);
+            }
+        }
+
+        Predicate finalUserPredicate = criteriaBuilder.and(userPredicate.toArray(new Predicate[0]));
+        Predicate finalBookPredicate = criteriaBuilder.and(bookPredicate.toArray(new Predicate[0]));
+        Predicate finalPredicate =  criteriaBuilder.and(finalUserPredicate,finalBookPredicate);
+
+        criteriaQuery.where(finalPredicate);
+        List<Book> bookList = entityManager.createQuery(criteriaQuery)
+                .setFirstResult(pageable.getPageNumber() * pageable.getPageSize())
+                .setMaxResults(pageable.getPageSize())
+                .getResultList();
+
+        Long totalElements = getTotalElements(books, users);
+        return PageResponse.<BookDetailResponse>builder()
+                .currentPage(pageable.getPageNumber() + 1)
+                .pageSize(pageable.getPageSize())
+                .totalPages((int) Math.ceil((double) totalElements / pageable.getPageSize()))
+                .totalElement(totalElements)
+                .data(BookMapper.bookDetailResponses(bookList))
+                .build();
+    }
+    private Long getTotalElements(String[] books, String[] users) {
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Long> criteriaQuery = criteriaBuilder.createQuery(Long.class);
+        Root<Book> root = criteriaQuery.from(Book.class);
+        Join<Book, User> userJoin = root.join("author");
+
+        List<Predicate> userPredicate = new ArrayList<>();
+        List<Predicate> bookPredicate = new ArrayList<>();
+        Pattern pattern = Pattern.compile("(\\w+?)([:><!~^$.])(.*)(\\p{Punct}?)(.*)(\\p{Punct}?)");
+
+        for(String book : books) {
+            Matcher matcher = pattern.matcher(book);
+            if(matcher.find()) {
+                SpecSearchCriteria searchCriteria = new SpecSearchCriteria(
+                        matcher.group(1), matcher.group(2), matcher.group(3),
+                        matcher.group(4), matcher.group(5));
+                Predicate predicate = toBookPredicate(criteriaBuilder, root, searchCriteria);
+                bookPredicate.add(predicate);
+            }
+        }
+        for(String user : users) {
+            Matcher matcher = pattern.matcher(user);
+            if(matcher.find()) {
+                SpecSearchCriteria searchCriteria = new SpecSearchCriteria(
+                        matcher.group(1), matcher.group(2), matcher.group(3),
+                        matcher.group(4), matcher.group(5));
+                Predicate predicate = toUserPredicate(criteriaBuilder, userJoin, searchCriteria);
+                userPredicate.add(predicate);
+            }
+        }
+        Predicate finalUserPredicate = criteriaBuilder.and(userPredicate.toArray(new Predicate[0]));
+        Predicate finalBookPredicate = criteriaBuilder.and(bookPredicate.toArray(new Predicate[0]));
+        Predicate finalPredicate = criteriaBuilder.and(finalUserPredicate, finalBookPredicate);
+
+        criteriaQuery.select(criteriaBuilder.count(root)).where(finalPredicate);
+        return entityManager.createQuery(criteriaQuery)
+                .getSingleResult();
+    }
+    private Predicate toPredicate(CriteriaBuilder criteriaBuilder, Path<?> path, SpecSearchCriteria criteria) {
+        return switch (criteria.getOperation()) {
+            case EQUALITY -> {
+                if (path.getJavaType().equals(String.class)) {
+                    yield criteriaBuilder.like(path.as(String.class), String.format("%%%s%%", criteria.getValue()));
+                } else {
+                    yield criteriaBuilder.equal(path, criteria.getValue());
+                }
+            }
+            case NEGATION -> criteriaBuilder.notEqual(path, criteria.getValue());
+            case GREATER_THAN -> criteriaBuilder.greaterThanOrEqualTo(path.as(String.class), criteria.getValue().toString());
+            case LESS_THAN -> criteriaBuilder.lessThanOrEqualTo(path.as(String.class), criteria.getValue().toString());
+            case LIKE -> criteriaBuilder.like(path.as(String.class), String.format("%%%s%%", criteria.getValue()));
+            case STARTS_WITH -> criteriaBuilder.like(path.as(String.class), criteria.getValue() + "%");
+            case ENDS_WITH -> criteriaBuilder.like(path.as(String.class), "%" + criteria.getValue());
+            case CONTAINS -> criteriaBuilder.like(path.as(String.class), "%" + criteria.getValue() + "%");
+        };
+    }
+
+    private Predicate toBookPredicate(CriteriaBuilder criteriaBuilder, Root<Book> root, SpecSearchCriteria criteria) {
+        return toPredicate(criteriaBuilder, root.get(criteria.getKey()), criteria);
+    }
+
+    private Predicate toUserPredicate(CriteriaBuilder criteriaBuilder, Join<Book, User> userJoin, SpecSearchCriteria criteria) {
+        return toPredicate(criteriaBuilder, userJoin.get(criteria.getKey()), criteria);
+    }
+
 
 
 }

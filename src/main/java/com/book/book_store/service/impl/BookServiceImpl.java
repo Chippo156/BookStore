@@ -13,6 +13,7 @@ import com.book.book_store.model.User;
 import com.book.book_store.repository.BookRepository;
 import com.book.book_store.repository.SearchRepository;
 import com.book.book_store.repository.UserRepository;
+import com.book.book_store.repository.specification.SpecificationBuildQuery;
 import com.book.book_store.service.BookService;
 import com.book.book_store.service.CloudinaryService;
 import com.book.book_store.utils.SecurityUtils;
@@ -21,12 +22,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +46,7 @@ public class BookServiceImpl implements BookService {
     private final UserRepository userRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final SearchRepository searchRepository;
+    private final ElasticsearchTemplate elasticsearchTemplate;
 
     @Override
     @PreAuthorize("isAuthenticated()")
@@ -122,6 +131,53 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
+    public PageResponse<BookElasticSearch> searchElastic(int page, int size, String keyword) {
+        NativeQuery query;
+        if(keyword == null){
+            query = NativeQuery.builder()
+                    .withQuery(q -> q.matchAll(m->m))
+                    .withPageable(PageRequest.of(page-1,size))
+                    .build();
+        }
+        else{
+            query = NativeQuery.builder()
+                    .withQuery(q -> q.bool(b->b
+                            .should(s->s.match(m->m.field("title").query(keyword)
+                                    .fuzziness("AUTO")
+                                    .minimumShouldMatch("70%")
+                                    .boost(2.0F)
+                            ))
+                            .should(s->s.match(m->m.field("author_name").query(keyword)
+                                    .fuzziness("AUTO")
+                                    .minimumShouldMatch("70%")
+                                    .boost(2.0F)
+                            ))
+                            .should(s->s.match(m->m.field("description").query(keyword)
+                                    .fuzziness("AUTO")
+                                    .minimumShouldMatch("70%")
+                                    .boost(2.0F)
+                            ))
+                            .should(s->s.matchPhrasePrefix(m->m.field("isbn").query(keyword)
+                            ))
+                            .should(s -> s.match(m->m.field("language").query(keyword)))
+                    ))
+                    .withPageable(PageRequest.of(page-1,size))
+                    .build();
+
+        }
+        SearchHits<BookElasticSearch> searchHits = elasticsearchTemplate.search(query, BookElasticSearch.class);
+
+        long totalElement = searchHits.getTotalHits();
+        return PageResponse.<BookElasticSearch>builder()
+                .currentPage(page)
+                .pageSize(size)
+                .totalElement(totalElement)
+                .totalPages((int) Math.ceil(totalElement/ (double) size))
+                .data(searchHits.getSearchHits().stream().map(SearchHit::getContent).toList())
+                .build();
+    }
+
+    @Override
     public PageResponse<BookDetailResponse> getBookWithSortMultiFieldAndSearch(int page, int size, String sortBy, String user, String... search) {
         return searchRepository.getBookWithSortMultiFieldAndSearch(page, size, sortBy, user, search);
     }
@@ -129,5 +185,35 @@ public class BookServiceImpl implements BookService {
     @Override
     public PageResponse<BookDetailResponse> getBookWithSortAndKeyword(int page, int size, String sortBy, String keyword) {
         return searchRepository.getBookWithSortAndKeyword(page, size, sortBy, keyword);
+    }
+
+    @Override
+    public PageResponse<BookDetailResponse> getBookWithSortAndSearchSpecification(int page, int size, String sortBy, String[] books, String[] users) {
+        Sort sort = Sort.by(sortBy);
+        Pageable  pageable = PageRequest.of(page-1,size,sort);
+        if(books != null && users != null){
+            log.info("Search Book join user");
+            return searchRepository.getBookJoinUser(pageable, books, users);
+        }
+        SpecificationBuildQuery specificationBuildQuery = new SpecificationBuildQuery();
+        if(books != null){
+            for (String book : books){
+                Pattern pattern = Pattern.compile("(\\w+?)([:><!~^$.])(.*)(\\p{Punct}?)(.*)(\\p{Punct}?)");
+                Matcher matcher = pattern.matcher(book);
+                if(matcher.find()) {
+                    specificationBuildQuery.with(matcher.group(1), matcher.group(2), matcher.group(3),
+                            matcher.group(4), matcher.group(5));
+                }
+            }
+        }
+        Page<Book> pageBooks = bookRepository.findAll(specificationBuildQuery.buildQuery(), pageable);
+        List<Book> listBooks = pageBooks.getContent();
+        return PageResponse.<BookDetailResponse>builder()
+                .currentPage(page)
+                .pageSize(pageable.getPageSize())
+                .totalElement(pageBooks.getTotalElements())
+                .totalPages(pageBooks.getTotalPages())
+                .data(BookMapper.bookDetailResponses(listBooks))
+                .build();
     }
 }

@@ -5,6 +5,7 @@ import com.book.book_store.dto.response.BookCreationResponse;
 import com.book.book_store.dto.response.BookDetailResponse;
 import com.book.book_store.dto.response.PageResponse;
 import com.book.book_store.dto.response.ResponseData;
+import com.book.book_store.model.BookElasticSearch;
 import com.book.book_store.service.BookService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +72,35 @@ public class BookController {
     {
         var result = bookService.getBookWithSortAndKeyword(page, size, sortBy, keyword);
         return ResponseData.<PageResponse<BookDetailResponse>>builder()
+                .data(result)
+                .message("Get all book with search keyword")
+                .code(HttpStatus.OK.value())
+                .build();
+    }
+    @GetMapping("/books-search-specification")
+    ResponseData<PageResponse<BookDetailResponse>> getAllBookAndSpecificationSearch(
+            @RequestParam(name ="page",required = false, defaultValue = "1") int page,
+            @RequestParam(name = "size",required = false, defaultValue = "10") int size,
+            @RequestParam(name = "sort",required = false) String sortBy,
+            @RequestParam(name = "users",required = false) String[] users,
+            @RequestParam(name = "books",required = false) String[] books
+    ){
+        var result = bookService.getBookWithSortAndSearchSpecification(page, size, sortBy, books, users);
+        return ResponseData.<PageResponse<BookDetailResponse>>builder()
+                .data(result)
+                .message("Get all book with search specification")
+                .code(HttpStatus.OK.value())
+                .build();
+    }
+    @GetMapping("/books")
+    ResponseData<PageResponse<BookElasticSearch>> getAllBookElasticSearch(
+            @RequestParam(name ="page",required = false, defaultValue = "1") int page,
+            @RequestParam(name = "size",required = false, defaultValue = "10") int size,
+            @RequestParam(name = "keyword", required = false) String keyword
+    )
+    {
+        var result = bookService.searchElastic(page, size, keyword);
+        return ResponseData.<PageResponse<BookElasticSearch>>builder()
                 .data(result)
                 .message("Get all book with search keyword")
                 .code(HttpStatus.OK.value())

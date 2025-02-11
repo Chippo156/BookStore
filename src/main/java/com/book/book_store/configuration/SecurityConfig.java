@@ -25,7 +25,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     public static final String[] publicList = {
-            "/api/v1/users-creation",
+            "/users-creation",
             "/api/v1/auth/**",
     };
     public final JwtDecodeCustomize jwtDecode;

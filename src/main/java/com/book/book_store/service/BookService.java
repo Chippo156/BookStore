@@ -4,6 +4,7 @@ import com.book.book_store.dto.request.BookCreationRequest;
 import com.book.book_store.dto.response.BookCreationResponse;
 import com.book.book_store.dto.response.BookDetailResponse;
 import com.book.book_store.dto.response.PageResponse;
+import com.book.book_store.model.BookElasticSearch;
 import org.springframework.data.domain.Page;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -12,6 +13,9 @@ public interface BookService {
     BookDetailResponse getBookById(Long id);
     PageResponse<BookDetailResponse> getAllBook(int page, int size);
 
+    PageResponse<BookElasticSearch> searchElastic(int page, int size, String keyword);
     PageResponse<BookDetailResponse> getBookWithSortMultiFieldAndSearch(int page, int size, String sortBy, String user, String... search);
     PageResponse<BookDetailResponse> getBookWithSortAndKeyword(int page, int size, String sortBy, String keyword);
+    PageResponse<BookDetailResponse> getBookWithSortAndSearchSpecification(int page, int size, String sortBy, String[] books, String[] users);
+
 }
